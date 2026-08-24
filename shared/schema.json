@@ -1,0 +1,8 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LookoutGridDataSchema",
+  "description": "Shared schema for Lookout Grid telemetry and message formats",
+  "type": "object",
+  "properties": {},
+  "required": []
+}
