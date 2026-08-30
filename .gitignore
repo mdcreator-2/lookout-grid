@@ -1,0 +1,44 @@
+# --- Python (already present from template) ---
+
+# --- Node.js / Frontend ---
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+.npm
+*.tgz
+
+# --- Data & ML ---
+ml/data/raw/*
+ml/data/processed/*
+ml/data/external/*
+!ml/data/**/.gitkeep
+ml/models/*.pkl
+ml/models/*.h5
+ml/models/*.pt
+ml/models/*.tflite
+ml/models/*.onnx
+*.csv
+*.parquet
+
+# --- Environment ---
+.env
+.env.local
+.env.production
+
+# --- IDE ---
+.vscode/
+.idea/
+*.code-workspace
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- Docker ---
+docker-compose.override.yml
+
+# --- Arduino / PlatformIO ---
+edge/.pio/
+edge/.vscode/
