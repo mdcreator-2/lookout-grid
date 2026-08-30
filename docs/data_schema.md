@@ -10,10 +10,10 @@ This is the universal format for a single sensor reading. Used everywhere.
   "timestamp": "2026-08-24T13:00:00.000+05:30",
   "readings": {
     "water_level_m": 2.5,
-    "rainfall": true,
+    "rainfall_mm_hr": 12.5,
     "temperature_c": 28.3,
     "humidity_pct": 94.1,
-    "pressure_pa": 1005.2,
+    "pressure_hpa": 1005.2,
     "pm25_ugm3": null,
     "pm10_ugm3": null,
     "smoke_ppm": null,
@@ -21,7 +21,7 @@ This is the universal format for a single sensor reading. Used everywhere.
     "tds_ppm": null,
     "wind_speed_kmh": null,
     "uv_index": null,
-    "co_ugm3": null,
+    "co_ugm3": null
   },
   "device_health": {
     "battery_pct": 78,
@@ -32,10 +32,10 @@ This is the universal format for a single sensor reading. Used everywhere.
   },
   "edge_inference": {
     "model_version": "flood-v2-q8",
-    "an omaly_detected": true,
+    "anomaly_detected": true,
     "anomaly_score": 0.82,
     "inference_time_ms": 47,
-    "label": "RISING_WATER_FAST"
+    "edge_label": "RISING_WATER_FAST"
   }
 }
 ```
