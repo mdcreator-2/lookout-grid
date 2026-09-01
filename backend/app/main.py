@@ -13,7 +13,7 @@ async def lifespan(app:FastAPI):
     yield
     # Shutdown
     print("Application shutting down...")
-    await engine.dispose()
+    # await engine.dispose() # Uncomment this once the engine is defined in database.py
 
 
 def create_app() ->FastAPI:
