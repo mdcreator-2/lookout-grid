@@ -1,0 +1,16 @@
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    container_name: lookoutgrid_db
+    environment:
+      POSTGRES_DB: lookoutgrid
+      POSTGRES_USER: lookoutgrid_user
+      POSTGRES_PASSWORD: your_dev_password_here
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/migrations/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql
+
+volumes:
+  pgdata:

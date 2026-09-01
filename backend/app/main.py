@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
+from app.routers.system import router as system_router
 
 
 @asynccontextmanager
@@ -28,6 +29,10 @@ def create_app() ->FastAPI:
     allow_methods=["*"],
     allow_headers=["*"],
     )
+
+    # include routers
+    app.include_router(system_router, prefix="/v1", tags=["System"])
+    
     return app
 
 
