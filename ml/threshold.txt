@@ -1,2 +1,2 @@
 rainfall_threshold= 0.253
-ForestFire_threshold= 0.288
+ForestFire_threshold= 0.202
