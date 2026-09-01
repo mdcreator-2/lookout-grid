@@ -42,3 +42,12 @@ docker-compose.override.yml
 # --- Arduino / PlatformIO ---
 edge/.pio/
 edge/.vscode/
+
+# Venv
+backend/.venv
+edge/.venv
+ml/.venv
+
+# Python Cache
+*.pyc
+__pycache__/
