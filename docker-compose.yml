@@ -11,6 +11,16 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./backend/migrations/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql
+  mqtt:
+    image: eclipse-mosquitto:latest
+    container_name: lookoutgrid_mqtt
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./backend/mosquitto/config/mosquitto.conf:/backend/mosquitto/config/mosquitto.conf
+      - ./backend/mosquitto/data:/mosquitto/data
+      - ./backend/mosquitto/log:/mosquitto/log
 
 volumes:
   pgdata:
