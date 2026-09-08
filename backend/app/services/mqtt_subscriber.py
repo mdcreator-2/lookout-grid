@@ -3,29 +3,20 @@ import json
 import logging
 import aiomqtt
 
+from app.services.data_ingestion import (
+    handle_sensor_data,
+    handle_anomaly,
+    handle_new_alert,
+    handle_heartbeat,
+)
+
 # Configure a basic logger for the service
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mqtt_subscriber")
 
 # ==========================================
-# Handlers for specific topics
+# Handlers that are NOT yet in data_ingestion
 # ==========================================
-
-async def handle_sensor_data(payload):
-    logger.info(f"Handling sensor data: {payload}")
-    # TODO: Add logic (e.g., save to DB, forward to frontend)
-
-async def handle_anomaly(payload):
-    logger.info(f"Handling anomaly: {payload}")
-    # TODO: Add logic (e.g., trigger alerts)
-
-async def handle_new_alert(payload):
-    logger.info(f"Handling new alert: {payload}")
-    # TODO: Add logic
-
-async def handle_heartbeat(payload):
-    logger.info(f"Handling gateway heartbeat: {payload}")
-    # TODO: Add logic (e.g., update gateway status)
 
 async def handle_gateway_status(payload):
     logger.info(f"Handling gateway status: {payload}")
