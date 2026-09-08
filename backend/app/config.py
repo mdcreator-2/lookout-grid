@@ -47,7 +47,6 @@ class Settings(BaseSettings):
     # --- Logging ---
     LOG_LEVEL: str = "INFO"
 
-    
 settings = Settings()
 if __name__ == '__main__':
     s = Settings()
