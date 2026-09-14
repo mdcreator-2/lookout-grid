@@ -1,2 +1,2 @@
-
+aqi_threshold=0.159
 ForestFire_threshold=0.373  
