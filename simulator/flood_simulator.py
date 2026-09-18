@@ -2,6 +2,7 @@ import random
 import time
 import json
 from datetime import datetime, timezone
+
 import paho.mqtt.client as mqtt
 
 
@@ -19,64 +20,90 @@ MQTT_TOPIC = "lookout-grid/sensors"
 
 
 # ==============================
-# CREATE 100 FAKE SENSORS
+# CREATE 100 FLOOD SENSOR NODES
 # ==============================
 
 nodes = []
 
 for i in range(1, NUM_NODES + 1):
-
-    node = {
+    nodes.append({
         "node_id": f"LG-NODE-PAT-{i:03d}",
-        "lat": 25.6093 + random.uniform(-0.05, 0.05),
-        "lng": 85.1376 + random.uniform(-0.05, 0.05),
-        "water_level_m": random.uniform(0.7, 1.0)
-    }
-
-    nodes.append(node)
+        "lat": 25.6116 + random.uniform(-0.05, 0.05),
+        "lng": 85.116477 + random.uniform(-0.05, 0.05)
+    })
 
 
 # ==============================
-# CREATE SENSOR JSON PACKET
+# CREATE SENSOR PACKET
 # ==============================
 
 def create_packet(node, scenario):
 
-    water_level = node["water_level_m"]
+    # --------------------------
+    # NORMAL
+    # --------------------------
 
     if scenario == "NORMAL":
 
+        water_level = random.uniform(0.5, 1.0)
         rainfall = random.uniform(0, 5)
-        water_level += random.uniform(-0.02, 0.02)
+
+    # --------------------------
+    # HEAVY RAIN
+    # --------------------------
 
     elif scenario == "HEAVY_RAIN":
 
-        rainfall = random.uniform(30, 50)
-        water_level += random.uniform(0.05, 0.12)
+        water_level = random.uniform(1.0, 2.0)
+        rainfall = random.uniform(20, 60)
+
+    # --------------------------
+    # FLOOD
+    # --------------------------
 
     elif scenario == "FLOOD":
 
-        rainfall = random.uniform(40, 70)
-        water_level += random.uniform(0.12, 0.25)
+        water_level = random.uniform(2.0, 4.0)
+        rainfall = random.uniform(60, 120)
+
+    # --------------------------
+    # FLASH FLOOD
+    # --------------------------
 
     elif scenario == "FLASH_FLOOD":
 
-        rainfall = random.uniform(60, 100)
-        water_level += random.uniform(0.5, 1.0)
+        water_level = random.uniform(4.0, 6.0)
+        rainfall = random.uniform(120, 200)
+
+    # --------------------------
+    # RECOVERY
+    # --------------------------
 
     elif scenario == "RECOVERY":
 
-        rainfall = random.uniform(0, 5)
-        water_level -= random.uniform(0.05, 0.15)
+        water_level = random.uniform(0.8, 1.8)
+        rainfall = random.uniform(0, 15)
 
     else:
 
-        rainfall = 0
+        water_level = 0.7
+        rainfall = 2.0
 
-    water_level = max(0, water_level)
 
-    node["water_level_m"] = water_level
+    # ==========================
+    # OTHER ENVIRONMENT VALUES
+    # ==========================
 
+    temperature = random.uniform(25, 35)
+    humidity = random.uniform(60, 95)
+    pressure = random.uniform(990, 1015)
+    soil_moisture = random.uniform(50, 90)
+    wind_speed = random.uniform(2, 20)
+
+
+    # ==========================
+    # SENSOR PACKET
+    # ==========================
 
     packet = {
 
@@ -107,17 +134,11 @@ def create_packet(node, scenario):
 
             "rainfall_mm_hr": round(rainfall, 2),
 
-            "temperature_c": round(
-                random.uniform(25, 32), 2
-            ),
+            "temperature_c": round(temperature, 2),
 
-            "humidity_pct": round(
-                random.uniform(70, 95), 2
-            ),
+            "humidity_pct": round(humidity, 2),
 
-            "pressure_hpa": round(
-                random.uniform(995, 1015), 2
-            ),
+            "pressure_hpa": round(pressure, 2),
 
             "pm25_ugm3": None,
 
@@ -125,13 +146,9 @@ def create_packet(node, scenario):
 
             "smoke_ppm": None,
 
-            "soil_moisture_pct": round(
-                random.uniform(40, 80), 2
-            ),
+            "soil_moisture_pct": round(soil_moisture, 2),
 
-            "wind_speed_kmh": round(
-                random.uniform(2, 15), 2
-            ),
+            "wind_speed_kmh": round(wind_speed, 2),
 
             "uv_index": None
         },
@@ -140,17 +157,11 @@ def create_packet(node, scenario):
 
             "battery_pct": random.randint(70, 100),
 
-            "solar_charging": random.choice(
-                [True, False]
-            ),
+            "solar_charging": random.choice([True, False]),
 
-            "signal_strength_dbm": random.randint(
-                -95, -60
-            ),
+            "signal_strength_dbm": random.randint(-95, -60),
 
-            "uptime_seconds": random.randint(
-                10000, 500000
-            ),
+            "uptime_seconds": random.randint(10000, 500000),
 
             "firmware_version": "1.2.3"
         }
@@ -160,12 +171,15 @@ def create_packet(node, scenario):
 
 
 # ==============================
-# RUN SIMULATION
+# RUN FLOOD SIMULATION
 # ==============================
 
 def run_simulation(scenario):
 
-    print("\nConnecting to MQTT broker...")
+    print()
+    print("🌊 FLOOD SIMULATION STARTED")
+    print("Scenario:", scenario)
+    print("Connecting to MQTT broker...")
 
     client = mqtt.Client(
         mqtt.CallbackAPIVersion.VERSION2
@@ -180,18 +194,25 @@ def run_simulation(scenario):
     client.loop_start()
 
     print("MQTT connected successfully!")
-    print("Scenario:", scenario)
+    print(f"Simulating {NUM_NODES} flood sensor nodes.")
 
+    # --------------------------
+    # 20 SIMULATION CYCLES
+    # --------------------------
 
     for cycle in range(20):
 
-        print("\n==============================")
-        print("SIMULATION CYCLE:", cycle + 1)
-        print("SCENARIO:", scenario)
+        print()
+        print("==============================")
+        print(f"FLOOD SIMULATION CYCLE: {cycle + 1}")
+        print(f"SCENARIO: {scenario}")
         print("==============================")
 
+        published = 0
 
-        # Send data from all 100 sensors
+        # ----------------------
+        # SEND 100 SENSOR PACKETS
+        # ----------------------
 
         for node in nodes:
 
@@ -200,25 +221,29 @@ def run_simulation(scenario):
                 scenario
             )
 
-            client.publish(
+            result = client.publish(
                 MQTT_TOPIC,
                 json.dumps(packet)
             )
 
-
-        # Don't print 100 huge JSON packets.
-        # Just show a summary.
+            if result.rc == mqtt.MQTT_ERR_SUCCESS:
+                published += 1
 
         print(
-            f"Published {len(nodes)} sensor packets to MQTT."
+            f"Published {published}/{NUM_NODES} flood sensor packets to MQTT."
         )
 
-
+        # Wait before next cycle
         time.sleep(10)
 
+    # ==========================
+    # DISCONNECT
+    # ==========================
 
     client.loop_stop()
 
     client.disconnect()
 
-    print("\nMQTT disconnected.")
+    print()
+    print("🌊 Flood simulation completed.")
+    print("MQTT disconnected.")
