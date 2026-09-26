@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LookoutGrid — Air Quality Dashboard</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --glass: rgba(255, 255, 255, 0.72);
+      --glass-border: rgba(226, 232, 240, 0.7);
+      --glass-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.03);
+      --glass-hover: rgba(255, 255, 255, 0.92);
+      --ink: #0f172a;
+      --ink2: #475569;
+      --ink3: #94a3b8;
+
+      /* AQI 6-tier color palette (Indian NAQI) */
+      --aqi-good: #22c55e;
+      /* 0-50 */
+      --aqi-satisfactory: #14b8a6;
+      /* 51-100 */
+      --aqi-moderate: #eab308;
+      /* 101-200 */
+      --aqi-poor: #f97316;
+      /* 201-300 */
+      --aqi-very-poor: #dc2626;
+      /* 301-400 */
+      --aqi-severe: #881337;
+      /* 401-500 */
+      --severe-glow: rgba(136, 19, 55, 0.25);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    /* === NAVBAR === */
+    .navbar {
+      position: sticky;
+      top: 0;
+      z-index: 3000;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 28px;
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--glass-border);
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-logo {
+      height: 26px;
+      width: auto;
+      object-fit: contain;
+    }
+
+    .nav-brand span {
+      font-weight: 700;
+      font-size: 17px;
+      letter-spacing: -0.02em;
+    }
+
+    .nav-title {
+      font-size: 15px;
+      font-weight: 500;
+      color: var(--ink2);
+    }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .nav-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--ink3);
+      font-weight: 500;
+    }
+
+    .nav-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #0d9488, #06b6d4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    /* === MAIN CONTENT === */
+    .main {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 20px 28px;
+    }
+
+    /* === NODE STATS ROW === */
+    .stats-section {
+      margin-bottom: 24px;
+    }
+
+    .stats-section-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--ink3);
+      margin-bottom: 10px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+
+    .node-card {
+      background: var(--glass);
+      border: 1.5px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 18px;
+      cursor: pointer;
+      box-shadow: var(--glass-shadow);
+      backdrop-filter: blur(14px);
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .node-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      border-radius: 12px 12px 0 0;
+      transition: opacity 0.3s;
+    }
+
+    .node-card[data-risk="good"]::before {
+      background: var(--aqi-good);
+    }
+
+    .node-card[data-risk="satisfactory"]::before {
+      background: var(--aqi-satisfactory);
+    }
+
+    .node-card[data-risk="moderate"]::before {
+      background: var(--aqi-moderate);
+    }
+
+    .node-card[data-risk="poor"]::before {
+      background: var(--aqi-poor);
+    }
+
+    .node-card[data-risk="very_poor"]::before {
+      background: var(--aqi-very-poor);
+    }
+
+    .node-card[data-risk="severe"]::before {
+      background: var(--aqi-severe);
+    }
+
+    .node-card:hover {
+      background: var(--glass-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.08);
+    }
+
+    .node-card.selected {
+      background: rgba(255, 255, 255, 0.95);
+      border-color: var(--ink);
+      box-shadow: 0 0 0 1px var(--ink), 0 8px 24px -4px rgba(15, 23, 42, 0.1);
+      transform: translateY(-2px);
+    }
+
+    .node-card[data-risk="severe"].selected {
+      border-color: var(--aqi-severe);
+      box-shadow: 0 0 0 1px var(--aqi-severe), 0 0 20px -2px var(--severe-glow);
+    }
+
+    .node-card[data-risk="very_poor"].selected {
+      border-color: var(--aqi-very-poor);
+      box-shadow: 0 0 0 1px var(--aqi-very-poor), 0 0 20px -2px rgba(220, 38, 38, 0.25);
+    }
+
+    .card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .card-node-id {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--ink);
+    }
+
+    .card-risk-badge {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 20px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .card-risk-badge .bdot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+    }
+
+    .card-location {
+      font-size: 11px;
+      color: var(--ink3);
+      margin-bottom: 12px;
+      font-weight: 500;
+    }
+
+    .card-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 12px;
+    }
+
+    .stat-item {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      color: var(--ink3);
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .stat-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .stat-value.good {
+      color: var(--aqi-good);
+    }
+
+    .stat-value.satisfactory {
+      color: var(--aqi-satisfactory);
+    }
+
+    .stat-value.moderate {
+      color: var(--aqi-moderate);
+    }
+
+    .stat-value.poor {
+      color: var(--aqi-poor);
+    }
+
+    .stat-value.very_poor {
+      color: var(--aqi-very-poor);
+    }
+
+    .stat-value.severe {
+      color: var(--aqi-severe);
+    }
+
+    .stat-value.normal {
+      color: var(--ink);
+    }
+
+    /* === MAP SECTION === */
+    .map-section {
+      position: relative;
+      border-radius: 14px;
+      overflow: hidden;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      box-shadow: var(--glass-shadow);
+      backdrop-filter: blur(14px);
+      margin-bottom: 24px;
+      z-index: 10;
+    }
+
+    .map-container {
+      position: relative;
+      width: 100%;
+      height: 520px;
+      background: #f4f7fc;
+      overflow: hidden;
+    }
+
+    #realMap {
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    /* Leaflet Map Customizations */
+    .leaflet-container {
+      font-family: 'Inter', sans-serif;
+      background: #f8fafc;
+    }
+
+    .leaflet-tile-pane {
+      opacity: 0.85;
+    }
+
+    .leaflet-tooltip.node-tooltip {
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid var(--glass-border);
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--ink);
+      padding: 6px 10px;
+    }
+
+    .leaflet-tooltip.node-tooltip::before {
+      display: none;
+    }
+
+    .pulse-icon {
+      border-radius: 50%;
+      box-shadow: 0 0 0 0 rgba(136, 19, 55, 0.7);
+      animation: map-pulse 1.5s infinite;
+    }
+
+    @keyframes map-pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(136, 19, 55, 0.7);
+      }
+
+      70% {
+        box-shadow: 0 0 0 15px rgba(136, 19, 55, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(136, 19, 55, 0);
+      }
+    }
+
+    /* === NODE MODAL === */
+    .node-modal {
+      position: absolute;
+      top: 50%;
+      right: 24px;
+      transform: translateY(-50%);
+      width: 320px;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.88);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      box-shadow: 0 12px 32px -4px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+      z-index: 2000;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .node-modal.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .node-modal.severe {
+      border-left: 3px solid var(--aqi-severe);
+      box-shadow: 0 0 0 1px rgba(136, 19, 55, 0.3), 0 0 24px -2px var(--severe-glow), 0 12px 32px -4px rgba(15, 23, 42, 0.08);
+    }
+
+    .node-modal.very_poor {
+      border-left: 3px solid var(--aqi-very-poor);
+    }
+
+    .node-modal.poor {
+      border-left: 3px solid var(--aqi-poor);
+    }
+
+    .node-modal.moderate {
+      border-left: 3px solid var(--aqi-moderate);
+    }
+
+    .node-modal.satisfactory {
+      border-left: 3px solid var(--aqi-satisfactory);
+    }
+
+    .node-modal.good {
+      border-left: 3px solid var(--aqi-good);
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .modal-badge {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 20px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .modal-badge .pulse-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      animation: pulse-dot 1.5s infinite;
+    }
+
+    @keyframes pulse-dot {
+
+      0%,
+      100% {
+        opacity: 1;
+        transform: scale(1)
+      }
+
+      50% {
+        opacity: 0.5;
+        transform: scale(1.4)
+      }
+    }
+
+    .modal-close {
+      cursor: pointer;
+      color: var(--ink3);
+      font-size: 18px;
+      line-height: 1;
+      border: none;
+      background: none;
+    }
+
+    .modal-close:hover {
+      color: var(--ink);
+    }
+
+    .modal-node-id {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: var(--ink2);
+      margin-bottom: 14px;
+    }
+
+    .modal-prob {
+      font-size: 48px;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -0.03em;
+      margin-bottom: 2px;
+    }
+
+    .modal-prob-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      color: var(--ink3);
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+
+    .modal-assessment {
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--ink2);
+      padding: 12px;
+      background: rgba(248, 250, 252, 0.8);
+      border-radius: 8px;
+      border: 1px solid rgba(226, 232, 240, 0.5);
+      margin-bottom: 14px;
+    }
+
+    .modal-link {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--ink2);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .modal-link:hover {
+      color: var(--ink);
+    }
+
+    /* === CHARTS === */
+    .charts-section-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--ink3);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .charts-selected-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--ink);
+      letter-spacing: 0;
+      text-transform: none;
+    }
+
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .chart-card {
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: var(--glass-shadow);
+      backdrop-filter: blur(14px);
+    }
+
+    .chart-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink);
+      margin-bottom: 2px;
+    }
+
+    .chart-subtitle {
+      font-size: 10px;
+      color: var(--ink3);
+      margin-bottom: 14px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .chart-wrap {
+      position: relative;
+      height: 200px;
+    }
+
+    /* === FOOTER === */
+    .footer {
+      border-top: 1px solid rgba(226, 232, 240, 0.5);
+      padding: 10px 28px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: var(--ink3);
+      font-family: 'JetBrains Mono', monospace;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- SVG Gradients for Map Regions — 6 AQI tiers -->
+  <svg width="0" height="0" style="position:absolute; z-index:-1;">
+    <defs>
+      <radialGradient id="grad-good" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#ffffff" stop-opacity="0.8" />
+        <stop offset="40%" stop-color="#22c55e" stop-opacity="0.4" />
+        <stop offset="100%" stop-color="#22c55e" stop-opacity="0.05" />
+      </radialGradient>
+      <radialGradient id="grad-satisfactory" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#ffffff" stop-opacity="0.8" />
+        <stop offset="40%" stop-color="#14b8a6" stop-opacity="0.4" />
+        <stop offset="100%" stop-color="#14b8a6" stop-opacity="0.05" />
+      </radialGradient>
+      <radialGradient id="grad-moderate" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#ffffff" stop-opacity="0.8" />
+        <stop offset="40%" stop-color="#eab308" stop-opacity="0.45" />
+        <stop offset="100%" stop-color="#eab308" stop-opacity="0.05" />
+      </radialGradient>
+      <radialGradient id="grad-poor" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#ffffff" stop-opacity="0.85" />
+        <stop offset="40%" stop-color="#f97316" stop-opacity="0.5" />
+        <stop offset="100%" stop-color="#f97316" stop-opacity="0.08" />
+      </radialGradient>
+      <radialGradient id="grad-very_poor" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9" />
+        <stop offset="35%" stop-color="#f97316" stop-opacity="0.5" />
+        <stop offset="70%" stop-color="#dc2626" stop-opacity="0.45" />
+        <stop offset="100%" stop-color="#dc2626" stop-opacity="0.1" />
+      </radialGradient>
+      <radialGradient id="grad-severe" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9" />
+        <stop offset="30%" stop-color="#dc2626" stop-opacity="0.55" />
+        <stop offset="70%" stop-color="#881337" stop-opacity="0.5" />
+        <stop offset="100%" stop-color="#881337" stop-opacity="0.12" />
+      </radialGradient>
+    </defs>
+  </svg>
+
+
+  <!-- ========== NAVBAR ========== -->
+  <nav class="navbar">
+    <div class="nav-brand">
+      <img src="Untitled%20design.png" alt="Logo" class="brand-logo" />
+      <span>LookoutGrid</span>
+    </div>
+    <div class="nav-title">Air Quality Dashboard</div>
+    <div class="nav-right">
+      <span class="nav-time" id="navTime">27 Sep 2026 • 01:50 IST</span>
+      <div class="nav-avatar">IC</div>
+    </div>
+  </nav>
+
+  <div class="main">
+
+
+    <!-- ========== MAP SECTION ========== -->
+    <div class="map-section">
+      <div class="map-container">
+        <div id="realMap"></div>
+      </div>
+
+      <!-- Node Detail Modal -->
+      <div class="node-modal" id="nodeModal">
+        <div class="modal-header">
+          <span class="modal-badge" id="modalBadge">
+            <span class="pulse-dot" id="modalPulseDot"></span>
+            <span id="modalBadgeText">SEVERE</span>
+          </span>
+          <button class="modal-close" onclick="closeModalBtn()">✕</button>
+        </div>
+        <div class="modal-node-id" id="modalNodeId">LG-AQI-06 • Anand Vihar</div>
+        <div class="modal-prob" id="modalProb" style="color:#881337">438</div>
+        <div class="modal-prob-label">AQI Index (Current)</div>
+
+        <div class="modal-assessment" id="modalAssessment">
+          HEALTH EMERGENCY — Air quality has reached hazardous levels. PM2.5 at 385 µg/m³ is over 15x the WHO safe
+          limit. Outdoor activity prohibited. All residents advised to stay indoors with air purifiers.
+        </div>
+
+        <a href="#" class="modal-link">View Full Report <span>→</span></a>
+      </div>
+    </div>
+
+    <!-- ========== NODE STATS ROW ========== -->
+    <div class="stats-section">
+      <div class="stats-section-title">AQI Monitoring Stations — Click to inspect and filter data</div>
+      <div class="stats-grid" id="statsGrid">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+
+    <!-- ========== CHARTS ========== -->
+    <div class="charts-section-title">
+      Telemetry Trends — showing:
+      <span class="charts-selected-label" id="chartsLabel">All Stations</span>
+    </div>
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-title">PM2.5 Trend (24h)</div>
+        <div class="chart-subtitle" id="chartSub1">µg/m³ concentration</div>
+        <div class="chart-wrap"><canvas id="chartPm25"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">PM10 Trend (24h)</div>
+        <div class="chart-subtitle" id="chartSub2">µg/m³ concentration</div>
+        <div class="chart-wrap"><canvas id="chartPm10"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">AQI Index Trend (24h)</div>
+        <div class="chart-subtitle" id="chartSub3">National AQI scale 0–500</div>
+        <div class="chart-wrap"><canvas id="chartAqi"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">CO & NO₂ Levels (24h)</div>
+        <div class="chart-subtitle" id="chartSub4">µg/m³ concentration</div>
+        <div class="chart-wrap"><canvas id="chartGases"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== FOOTER ========== -->
+  <div class="footer">
+    <span>LookoutGrid v1.0 — SIH 2026</span>
+    <span>Last synced: 12s ago</span>
+  </div>
+
+  <script>
+    // ===== NODE DATA — 6 Delhi AQI Monitoring Stations =====
+    // Source: delhi-weather-aqi-2025.csv — 10 December 2025 (real data)
+    const nodes = [
+      {
+        id: 'LG-AQI-01', location: 'Connaught Place', risk: 'moderate', riskLabel: 'MODERATE',
+        aqi: 153, aqiColor: '#eab308', color: '#eab308',
+        coords: [28.6304, 77.2177], radiusKm: 3,
+        pm25: 110.4, pm10: 111.1, co: 1422, no2: 55.8,
+        temp: 16.5, humidity: 62, wind: 4.8, windDir: 'NW',
+        battery: 92, signal: -62,
+        assessment: 'Moderate air quality recorded at Connaught Place. PM2.5 at 110.4 µg/m³ exceeds the 60 µg/m³ safe threshold. CO levels elevated at 1422 µg/m³ due to vehicular congestion. Breathing discomfort likely for sensitive groups — children, elderly, and those with asthma or heart conditions. Limit prolonged outdoor exertion. Consider wearing N95 masks during commute hours.'
+      },
+      {
+        id: 'LG-AQI-02', location: 'Dwarka Sector 8', risk: 'moderate', riskLabel: 'MODERATE',
+        aqi: 155, aqiColor: '#eab308', color: '#eab308',
+        coords: [28.5882, 77.0494], radiusKm: 4,
+        pm25: 119.2, pm10: 119.7, co: 1773, no2: 87.5,
+        temp: 15.1, humidity: 70, wind: 5.2, windDir: 'W',
+        battery: 89, signal: -66,
+        assessment: 'Moderate to poor conditions at Dwarka. PM2.5 at 119.2 µg/m³ and NO₂ elevated at 87.5 µg/m³ — highest NO₂ among all stations, likely due to proximity to NH-48 highway traffic. CO at 1773 µg/m³ also elevated. High humidity (70%) trapping pollutants at ground level. Sensitive individuals should avoid outdoor activities.'
+      },
+      {
+        id: 'LG-AQI-03', location: 'IGI Airport T3', risk: 'moderate', riskLabel: 'MODERATE',
+        aqi: 155, aqiColor: '#eab308', color: '#eab308',
+        coords: [28.5562, 77.1000], radiusKm: 5,
+        pm25: 119.2, pm10: 119.7, co: 1587, no2: 87.5,
+        temp: 15.1, humidity: 70, wind: 5.2, windDir: 'W',
+        battery: 84, signal: -69,
+        assessment: 'Moderate air quality at IGI Airport. PM2.5 and PM10 at 119 µg/m³ — above safe limits but below the Poor threshold. NO₂ elevated at 87.5 µg/m³ from aviation and ground transport emissions. CO at 1587 µg/m³. Visibility may be reduced. Travelers should be prepared for possible flight delays due to low visibility fog combined with smog.'
+      },
+      {
+        id: 'LG-AQI-04', location: 'Rohini Sector 16', risk: 'moderate', riskLabel: 'MODERATE',
+        aqi: 153, aqiColor: '#eab308', color: '#eab308',
+        coords: [28.7041, 77.1025], radiusKm: 5,
+        pm25: 110.4, pm10: 111.1, co: 1465, no2: 55.8,
+        temp: 15.0, humidity: 66, wind: 6.2, windDir: 'NW',
+        battery: 81, signal: -70,
+        assessment: 'Moderate pollution in Rohini. PM2.5 at 110.4 µg/m³ with steady evening buildup pattern. CO at 1465 µg/m³ from local traffic and construction. Temperature at 15°C with moderate humidity creating inversion conditions. Pollution expected to worsen overnight as winds die down. Residents should limit evening outdoor activities and keep windows closed.'
+      },
+      {
+        id: 'LG-AQI-05', location: 'Okhla Phase III', risk: 'moderate', riskLabel: 'MODERATE',
+        aqi: 155, aqiColor: '#eab308', color: '#eab308',
+        coords: [28.5273, 77.2618], radiusKm: 5,
+        pm25: 119.2, pm10: 119.7, co: 1351, no2: 87.5,
+        temp: 16.5, humidity: 63, wind: 5.9, windDir: 'N',
+        battery: 77, signal: -74,
+        assessment: 'Moderate conditions at Okhla Industrial Area. PM2.5 at 119.2 µg/m³ and NO₂ at 87.5 µg/m³ — industrial emissions contributing to elevated nitrogen dioxide. CO comparatively lower at 1351 µg/m³. The industrial zone generates sustained pollutant loads. Workers in outdoor occupations should use respiratory protection.'
+      },
+      {
+        id: 'LG-AQI-06', location: 'Anand Vihar', risk: 'moderate', riskLabel: 'MODERATE',
+        aqi: 153, aqiColor: '#eab308', color: '#eab308',
+        coords: [28.6469, 77.3160], radiusKm: 5,
+        pm25: 110.4, pm10: 111.1, co: 1526, no2: 55.8,
+        temp: 17.1, humidity: 58, wind: 5.4, windDir: 'NW',
+        battery: 73, signal: -78,
+        assessment: 'Moderate pollution at Anand Vihar — historically one of Delhi\'s most polluted stations. PM2.5 at 110.4 µg/m³, currently below its peak range (up to 369 µg/m³). CO elevated at 1526 µg/m³ from heavy traffic on NH-24 and ISBT bus terminal. Station has recorded AQI up to 830 in severe episodes. Current conditions are typical for a December evening. Monitor for overnight deterioration.'
+      }
+    ];
+
+    // ===== MAP INITIALIZATION (Leaflet) — City street map =====
+    const mapCenter = [28.6139, 77.2090]; // Delhi NCR
+    const map = L.map('realMap', { zoomControl: false }).setView(mapCenter, 11);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+    // Esri World Street Map — clean city/street tiles (free, no API key needed)
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
+      maxZoom: 18
+    }).addTo(map);
+
+    const mapMarkers = [];
+
+    nodes.forEach((n, idx) => {
+      // 1. Draw AQI Influence Radius Circle
+      const radiusMeters = n.radiusKm * 1000;
+      const circle = L.circle(n.coords, {
+        radius: radiusMeters,
+        stroke: false,
+        fillColor: `url(#grad-${n.risk})`,
+        fillOpacity: 1
+      }).addTo(map);
+
+      // 2. Draw Center Station Dot
+      let dot;
+      if (n.risk === 'severe') {
+        const icon = L.divIcon({
+          className: 'pulse-icon',
+          html: `<div style="width:14px; height:14px; background:${n.color}; border-radius:50%; border:2px solid #fff;"></div>`,
+          iconSize: [14, 14],
+          iconAnchor: [7, 7]
+        });
+        dot = L.marker(n.coords, { icon: icon }).addTo(map);
+      } else {
+        dot = L.circleMarker(n.coords, {
+          radius: 6,
+          fillColor: n.color,
+          color: '#fff',
+          weight: 2,
+          fillOpacity: 1
+        }).addTo(map);
+      }
+
+      // 3. Tooltip
+      dot.bindTooltip(`<b>${n.id}</b><br><span style="color:${n.color}">${n.riskLabel}</span>`, {
+        permanent: true,
+        direction: 'right',
+        className: 'node-tooltip',
+        offset: [12, 0]
+      });
+
+      // 4. Click Events
+      const onClick = () => selectNode(idx);
+      const onHover = () => hoverNode(idx);
+      const onOut = () => unhoverNode();
+      circle.on('click', onClick);
+      circle.on('mouseover', onHover);
+      circle.on('mouseout', onOut);
+      dot.on('click', onClick);
+      dot.on('mouseover', onHover);
+      dot.on('mouseout', onOut);
+
+      mapMarkers.push({ circle, dot });
+    });
+
+    // ===== TIME SERIES DATA (24h, 8 data points) =====
+    // Source: delhi-weather-aqi-2025.csv — 10 December 2025 (real hourly data sampled at 3h intervals)
+    const timeLabels = ['00:00', '03:00', '06:00', '09:00', '12:00', '15:00', '18:00', 'Now'];
+
+    // PM2.5 data (µg/m³) — real values from dataset
+    const pm25Data = [
+      [53.3, 50.2, 53.8, 68.2, 50.5, 43.7, 75.2, 110.4],   // Connaught Place
+      [56.8, 52.6, 55.1, 68.5, 48.7, 42.7, 88.7, 119.2],   // Dwarka
+      [56.8, 52.6, 55.1, 68.5, 48.7, 42.7, 88.7, 119.2],   // IGI Airport
+      [53.3, 50.2, 53.8, 68.2, 50.5, 43.7, 75.2, 110.4],   // Rohini
+      [56.8, 52.6, 55.1, 68.5, 48.7, 42.7, 88.7, 119.2],   // Okhla Phase III
+      [53.3, 50.2, 53.8, 68.2, 50.5, 43.7, 75.2, 110.4]    // Anand Vihar
+    ];
+
+    // PM10 data (µg/m³) — real values from dataset
+    const pm10Data = [
+      [54.4, 51.2, 54.7, 68.7, 51.2, 44.4, 75.7, 111.1],   // Connaught Place
+      [57.6, 53.4, 55.8, 68.9, 49.5, 43.7, 89.4, 119.7],   // Dwarka
+      [57.6, 53.4, 55.8, 68.9, 49.5, 43.7, 89.4, 119.7],   // IGI Airport
+      [54.4, 51.2, 54.7, 68.7, 51.2, 44.4, 75.7, 111.1],   // Rohini
+      [57.6, 53.4, 55.8, 68.9, 49.5, 43.7, 89.4, 119.7],   // Okhla Phase III
+      [54.4, 51.2, 54.7, 68.7, 51.2, 44.4, 75.7, 111.1]    // Anand Vihar
+    ];
+
+    // AQI Index data — real values from dataset
+    const aqiData = [
+      [146, 142, 138, 136, 136, 139, 145, 153],   // Connaught Place
+      [151, 150, 146, 144, 143, 145, 150, 155],   // Dwarka
+      [151, 150, 146, 144, 143, 145, 150, 155],   // IGI Airport
+      [146, 142, 138, 136, 136, 139, 145, 153],   // Rohini
+      [151, 150, 146, 144, 143, 145, 150, 155],   // Okhla Phase III
+      [146, 142, 138, 136, 136, 139, 145, 153]    // Anand Vihar
+    ];
+
+    // CO data (µg/m³) — real values (highest station differentiation)
+    const coData = [
+      [1100, 959, 1202, 1552, 1110, 1063, 1352, 1422],   // Connaught Place
+      [1092, 993, 1104, 1227, 937, 954, 1302, 1773],     // Dwarka
+      [1104, 974, 1185, 1462, 1037, 1048, 1372, 1587],   // IGI Airport
+      [1073, 934, 1177, 1493, 1062, 1053, 1334, 1465],   // Rohini
+      [1085, 954, 1167, 1493, 1100, 1036, 1469, 1351],   // Okhla Phase III
+      [1113, 946, 1238, 1687, 1159, 1097, 1541, 1526]    // Anand Vihar
+    ];
+
+    // NO₂ data (µg/m³) — real values from dataset
+    const no2Data = [
+      [23.8, 14.9, 19.3, 27.2, 12.0, 24.1, 48.6, 55.8],   // Connaught Place
+      [29.8, 17.5, 20.9, 29.8, 13.2, 26.6, 65.8, 87.5],   // Dwarka
+      [29.8, 17.5, 20.9, 29.8, 13.2, 26.6, 65.8, 87.5],   // IGI Airport
+      [23.8, 14.9, 19.3, 27.2, 12.0, 24.1, 48.6, 55.8],   // Rohini
+      [29.8, 17.5, 20.9, 29.8, 13.2, 26.6, 65.8, 87.5],   // Okhla Phase III
+      [23.8, 14.9, 19.3, 27.2, 12.0, 24.1, 48.6, 55.8]    // Anand Vihar
+    ];
+
+    const nodeColors = ['#eab308', '#eab308', '#eab308', '#eab308', '#eab308', '#eab308'];
+    const nodeNames = ['CP', 'Dwarka', 'IGI', 'Rohini', 'Okhla', 'Anand Vihar'];
+
+    // ===== CHART INSTANCES =====
+    let charts = {};
+
+    function createChart(canvasId, label, datasets, yUnit, thresholdLine) {
+      const ctx = document.getElementById(canvasId).getContext('2d');
+      const plugins = [];
+      if (thresholdLine) {
+        plugins.push({
+          id: 'thresholdLine',
+          afterDraw(chart) {
+            const yScale = chart.scales.y;
+            const y = yScale.getPixelForValue(thresholdLine.value);
+            const ctx = chart.ctx;
+            ctx.save();
+            ctx.strokeStyle = thresholdLine.color || '#dc2626';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([6, 4]);
+            ctx.beginPath(); ctx.moveTo(chart.chartArea.left, y); ctx.lineTo(chart.chartArea.right, y); ctx.stroke();
+            ctx.fillStyle = thresholdLine.color || '#dc2626';
+            ctx.font = '9px JetBrains Mono';
+            ctx.fillText(thresholdLine.label || '', chart.chartArea.right - 80, y - 5);
+            ctx.restore();
+          }
+        });
+      }
+
+      return new Chart(ctx, {
+        type: 'line',
+        data: { labels: timeLabels, datasets },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'nearest', intersect: false },
+          plugins: {
+            legend: {
+              display: datasets.length > 1,
+              position: 'bottom',
+              labels: { boxWidth: 8, boxHeight: 8, padding: 10, font: { family: 'Inter', size: 10, weight: '500' }, usePointStyle: true, pointStyle: 'circle' }
+            },
+            tooltip: { titleFont: { family: 'JetBrains Mono', size: 11 }, bodyFont: { family: 'JetBrains Mono', size: 11 }, padding: 10, cornerRadius: 8, backgroundColor: 'rgba(15,23,42,0.9)' }
+          },
+          scales: {
+            x: { grid: { display: false }, ticks: { font: { family: 'JetBrains Mono', size: 9, weight: '500' }, color: '#94a3b8' }, border: { display: false } },
+            y: {
+              grid: { color: 'rgba(226,232,240,0.5)', drawBorder: false },
+              ticks: { font: { family: 'JetBrains Mono', size: 9, weight: '500' }, color: '#94a3b8', callback: v => v + yUnit },
+              border: { display: false }
+            }
+          },
+          elements: { point: { radius: 0, hoverRadius: 5 }, line: { tension: 0.35 } }
+        },
+        plugins
+      });
+    }
+
+    function makeDataset(name, data, color, thick) {
+      return {
+        label: name, data, borderColor: color, backgroundColor: color + '18',
+        borderWidth: thick ? 2.5 : 1.5, fill: false, pointRadius: 0, pointHoverRadius: 5
+      };
+    }
+
+    function initCharts() {
+      charts.pm25 = createChart('chartPm25', 'PM2.5',
+        nodeNames.map((n, i) => makeDataset(n, pm25Data[i], nodeColors[i], i === 5)),
+        ' µg/m³', { value: 250, color: '#dc2626', label: 'Danger: 250 µg/m³' }
+      );
+      charts.pm10 = createChart('chartPm10', 'PM10',
+        nodeNames.map((n, i) => makeDataset(n, pm10Data[i], nodeColors[i], i === 5)),
+        ' µg/m³', { value: 350, color: '#dc2626', label: 'Danger: 350 µg/m³' }
+      );
+      charts.aqi = createChart('chartAqi', 'AQI',
+        nodeNames.map((n, i) => makeDataset(n, aqiData[i], nodeColors[i], i === 5)),
+        '', { value: 400, color: '#881337', label: 'Severe: 400' }
+      );
+      charts.gases = createChart('chartGases', 'CO',
+        nodeNames.map((n, i) => makeDataset(n, coData[i], nodeColors[i], i === 5)),
+        ' µg/m³', { value: 2000, color: '#f97316', label: 'Warning: 2000 µg/m³' }
+      );
+    }
+
+    // ===== UPDATE UI FOR SELECTED NODE =====
+    let selectedNode = -1; // -1 = all
+
+    function selectNode(idx) {
+      if (selectedNode === idx) {
+        selectedNode = -1; // deselect
+        unhoverNode();
+      } else {
+        selectedNode = idx;
+        showModal(idx);
+      }
+      updateCharts();
+      updateCardSelection();
+      updateMapSelection();
+      updateChartsLabel();
+    }
+
+    function updateCharts() {
+      const allData = [pm25Data, pm10Data, aqiData, coData];
+      const chartKeys = ['pm25', 'pm10', 'aqi', 'gases'];
+
+      chartKeys.forEach((key, ci) => {
+        const chart = charts[key];
+        if (selectedNode === -1) {
+          chart.data.datasets = nodeNames.map((n, i) => makeDataset(n, allData[ci][i], nodeColors[i], i === 5));
+          chart.options.plugins.legend.display = true;
+        } else {
+          const i = selectedNode;
+          chart.data.datasets = [makeDataset(nodeNames[i], allData[ci][i], nodeColors[i], true)];
+          chart.options.plugins.legend.display = false;
+        }
+        chart.update();
+      });
+    }
+
+    function updateCardSelection() {
+      document.querySelectorAll('.node-card').forEach((card, i) => {
+        card.classList.toggle('selected', i === selectedNode);
+      });
+    }
+
+    function updateMapSelection() {
+      mapMarkers.forEach((m, i) => {
+        if (selectedNode === -1) {
+          m.circle.setStyle({ opacity: 1, fillOpacity: 1 });
+          if (m.dot.setStyle) m.dot.setStyle({ opacity: 1, fillOpacity: 1 });
+          else m.dot.setOpacity(1);
+        } else {
+          const isSel = (i === selectedNode);
+          m.circle.setStyle({ opacity: isSel ? 1 : 0.25, fillOpacity: isSel ? 1 : 0.15 });
+          if (m.dot.setStyle) m.dot.setStyle({ opacity: isSel ? 1 : 0.4, fillOpacity: isSel ? 1 : 0.4 });
+          else m.dot.setOpacity(isSel ? 1 : 0.4);
+        }
+      });
+
+      if (selectedNode !== -1) {
+        map.flyTo(nodes[selectedNode].coords, 13, { duration: 0.6 });
+      } else {
+        map.flyTo(mapCenter, 11, { duration: 0.6 });
+      }
+    }
+
+    function updateChartsLabel() {
+      const label = document.getElementById('chartsLabel');
+      if (selectedNode === -1) {
+        label.textContent = 'All Stations';
+        label.style.color = '#0f172a';
+      } else {
+        label.textContent = nodes[selectedNode].id + ' — ' + nodes[selectedNode].location;
+        label.style.color = nodes[selectedNode].color;
+      }
+    }
+
+    // ===== RENDER NODE STATS CARDS =====
+    function getAqiColor(val) {
+      if (val <= 50) return 'good';
+      if (val <= 100) return 'satisfactory';
+      if (val <= 200) return 'moderate';
+      if (val <= 300) return 'poor';
+      if (val <= 400) return 'very_poor';
+      return 'severe';
+    }
+
+    function getPm25Color(val) {
+      if (val <= 30) return 'good';
+      if (val <= 60) return 'satisfactory';
+      if (val <= 90) return 'moderate';
+      if (val <= 120) return 'poor';
+      if (val <= 250) return 'very_poor';
+      return 'severe';
+    }
+
+    function getPm10Color(val) {
+      if (val <= 50) return 'good';
+      if (val <= 100) return 'satisfactory';
+      if (val <= 250) return 'moderate';
+      if (val <= 350) return 'poor';
+      if (val <= 430) return 'very_poor';
+      return 'severe';
+    }
+
+    function getCoColor(val) {
+      if (val <= 500) return 'good';
+      if (val <= 1000) return 'satisfactory';
+      if (val <= 1500) return 'moderate';
+      if (val <= 2000) return 'poor';
+      if (val <= 2500) return 'very_poor';
+      return 'severe';
+    }
+
+    function getNo2Color(val) {
+      if (val <= 20) return 'good';
+      if (val <= 40) return 'satisfactory';
+      if (val <= 80) return 'moderate';
+      if (val <= 180) return 'poor';
+      if (val <= 280) return 'very_poor';
+      return 'severe';
+    }
+
+    function renderStatsCards() {
+      const grid = document.getElementById('statsGrid');
+      grid.innerHTML = nodes.map((n, i) => {
+        const badgeColors = {
+          good: 'background:rgba(34,197,94,0.12);color:#16a34a',
+          satisfactory: 'background:rgba(20,184,166,0.12);color:#0d9488',
+          moderate: 'background:rgba(234,179,8,0.12);color:#ca8a04',
+          poor: 'background:rgba(249,115,22,0.12);color:#ea580c',
+          very_poor: 'background:rgba(220,38,38,0.14);color:#dc2626',
+          severe: 'background:rgba(136,19,55,0.14);color:#881337'
+        };
+        const dotColors = {
+          good: '#22c55e', satisfactory: '#14b8a6', moderate: '#eab308',
+          poor: '#f97316', very_poor: '#dc2626', severe: '#881337'
+        };
+        const aqiC = getAqiColor(n.aqi);
+        const pm25C = getPm25Color(n.pm25);
+        const pm10C = getPm10Color(n.pm10);
+        const coC = getCoColor(n.co);
+        const no2C = getNo2Color(n.no2);
+
+        return `
+      <div class="node-card" data-risk="${n.risk}" onclick="selectNode(${i})" onmouseenter="hoverNode(${i})" onmouseleave="unhoverNode()">
+        <div class="card-top">
+          <span class="card-node-id">${n.id}</span>
+          <span class="card-risk-badge" style="${badgeColors[n.risk]}">
+            <span class="bdot" style="background:${dotColors[n.risk]}"></span>
+            ${n.riskLabel} · AQI ${n.aqi}
+          </span>
+        </div>
+        <div class="card-location">${n.location}</div>
+        <div class="card-stats">
+          <div class="stat-item"><span class="stat-label">🌫️ AQI</span><span class="stat-value ${aqiC}">${n.aqi}</span></div>
+          <div class="stat-item"><span class="stat-label">🔴 PM2.5</span><span class="stat-value ${pm25C}">${n.pm25} µg/m³</span></div>
+          <div class="stat-item"><span class="stat-label">🟠 PM10</span><span class="stat-value ${pm10C}">${n.pm10} µg/m³</span></div>
+          <div class="stat-item"><span class="stat-label">🏭 CO</span><span class="stat-value ${coC}">${n.co} µg/m³</span></div>
+          <div class="stat-item"><span class="stat-label">☣️ NO₂</span><span class="stat-value ${no2C}">${n.no2} µg/m³</span></div>
+          <div class="stat-item"><span class="stat-label">🌡️ Temp</span><span class="stat-value normal">${n.temp}°C</span></div>
+          <div class="stat-item"><span class="stat-label">💧 Humidity</span><span class="stat-value normal">${n.humidity}%</span></div>
+          <div class="stat-item"><span class="stat-label">💨 Wind</span><span class="stat-value normal">${n.wind} km/h ${n.windDir}</span></div>
+        </div>
+      </div>
+    `;
+      }).join('');
+    }
+
+    // ===== NODE MODAL =====
+    let currentlyShowingModal = -1;
+    function hoverNode(idx) { showModal(idx); }
+    function unhoverNode() { if (selectedNode !== -1) { showModal(selectedNode); } else { hideModal(); } }
+
+    function showModal(idx) {
+      if (currentlyShowingModal === idx) return;
+      const n = nodes[idx];
+      const modal = document.getElementById('nodeModal');
+      const badge = document.getElementById('modalBadge');
+      const badgeText = document.getElementById('modalBadgeText');
+      const dot = document.getElementById('modalPulseDot');
+
+      modal.className = 'node-modal visible ' + n.risk;
+
+      const badgeStyles = {
+        severe: { bg: 'rgba(136,19,55,0.14)', color: '#881337', text: 'SEVERE', dotColor: '#881337' },
+        very_poor: { bg: 'rgba(220,38,38,0.14)', color: '#dc2626', text: 'VERY POOR', dotColor: '#dc2626' },
+        poor: { bg: 'rgba(249,115,22,0.12)', color: '#ea580c', text: 'POOR', dotColor: '#f97316' },
+        moderate: { bg: 'rgba(234,179,8,0.12)', color: '#ca8a04', text: 'MODERATE', dotColor: '#eab308' },
+        satisfactory: { bg: 'rgba(20,184,166,0.12)', color: '#0d9488', text: 'SATISFACTORY', dotColor: '#14b8a6' },
+        good: { bg: 'rgba(34,197,94,0.12)', color: '#16a34a', text: 'GOOD', dotColor: '#22c55e' }
+      };
+      const bs = badgeStyles[n.risk];
+      badge.style.background = bs.bg;
+      badge.style.color = bs.color;
+      badgeText.textContent = bs.text;
+      dot.style.background = bs.dotColor;
+
+      document.getElementById('modalNodeId').textContent = n.id + ' • ' + n.location;
+      document.getElementById('modalProb').textContent = n.aqi;
+      document.getElementById('modalProb').style.color = n.aqiColor;
+      document.getElementById('modalAssessment').textContent = n.assessment;
+      currentlyShowingModal = idx;
+    }
+
+    function hideModal() {
+      if (currentlyShowingModal === -1) return;
+      document.getElementById('nodeModal').classList.remove('visible');
+      currentlyShowingModal = -1;
+    }
+
+    function closeModalBtn() {
+      selectedNode = -1;
+      updateCharts();
+      updateCardSelection();
+      updateMapSelection();
+      updateChartsLabel();
+      hideModal();
+    }
+
+    // ===== LIVE CLOCK =====
+    function updateClock() {
+      const now = new Date();
+      const opts = { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
+      document.getElementById('navTime').textContent = now.toLocaleDateString('en-IN', opts).replace(',', '') + ' IST';
+    }
+
+    // ===== INIT =====
+    renderStatsCards();
+    initCharts();
+    updateClock();
+    setInterval(updateClock, 1000);
+  </script>
+</body>
+
+</html>
